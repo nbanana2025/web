@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>动感合成图展示</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* 核心：箭头动态效果 */
+        .arrow {
+            position: absolute;
+            animation: arrowPulse 2s infinite ease-in-out;
+        }
+        @keyframes arrowPulse {
+            0%, 100% { opacity: 0.6; transform: translateY(0); }
+            50% { opacity: 1; transform: translateY(-8px); }
+        }
+        /* 滚动视差效果 */
+        .parallax {
+            transition: transform 0.4s ease-out;
+        }
+        /* 图片hover放大动效 */
+        .img-hover {
+            transition: transform 0.3s ease;
+        }
+        .img-hover:hover {
+            transform: scale(1.05);
+        }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen p-4 md:p-6">
+    <div class="max-w-md mx-auto relative">
+        <!-- 顶部合成图区域 -->
+        <div class="mb-16 md:mb-20">
+            <h1 class="text-center text-2xl font-bold text-gray-800 mb-4">合成效果展示</h1>
+            <div class="bg-white rounded-xl shadow-lg overflow-hidden parallax" id="composite-img-container">
+                <img src="../img/00001.png" 
+                     alt="合成图" 
+                     class="w-full h-auto object-cover img-hover">
+            </div>
+        </div>
+
+        <!-- 底部素材图 + 动态箭头 容器（相对定位，承载绝对定位的箭头） -->
+        <div class="relative grid grid-cols-2 md:grid-cols-3 gap-4">
+            <!-- 素材图1 + 箭头1 -->
+            <div class="bg-white rounded-xl shadow-lg overflow-hidden parallax" id="source1-container">
+                <img src="../img/young.jpg" 
+                     alt="素材图1" 
+                     class="w-full h-auto object-cover img-hover">
+                <!-- 箭头：朝上指向合成图 -->
+                <svg class="arrow w-12 h-12 text-blue-500" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M7 14l5-5 5 5z"/>
+                </svg>
+            </div>
+
+            <!-- 素材图2 + 箭头2 -->
+            <div class="bg-white rounded-xl shadow-lg overflow-hidden parallax" id="source2-container">
+                <img src="../img/adult.jpg" 
+                     alt="素材图2" 
+                     class="w-full h-auto object-cover img-hover">
+                <svg class="arrow w-12 h-12 text-pink-500" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M7 14l5-5 5 5z"/>
+                </svg>
+            </div>
+
+            <!-- 素材图3 + 箭头3（可选） -->
+            <!-- <div class="bg-white rounded-xl shadow-lg overflow-hidden parallax hidden md:block" id="source3-container">
+                <img src="https://picsum.photos/400/300?random=4" 
+                     alt="素材图3" 
+                     class="w-full h-auto object-cover img-hover">
+                <svg class="arrow w-12 h-12 text-green-500" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M7 14l5-5 5 5z"/>
+                </svg>
+            </div> -->
+        </div>
+    </div>
+
+    <script>
+        // 1. 动态计算箭头位置（确保箭头从素材图顶部指向合成图底部）
+        function positionArrows() {
+            const compositeImg = document.getElementById('composite-img-container');
+            const compositeRect = compositeImg.getBoundingClientRect();
+
+            // 定位每个素材图的箭头
+            const sources = ['source1-container', 'source2-container', 'source3-container'];
+            sources.forEach((id, index) => {
+                const source = document.getElementById(id);
+                if (!source) return;
+                
+                const sourceRect = source.getBoundingClientRect();
+                const arrow = source.querySelector('.arrow');
+                if (!arrow) return;
+
+                // 箭头位置：素材图顶部居中，向上指向合成图
+                arrow.style.top = `${-sourceRect.height / 2 - 20}px`; // 向上偏移，位于素材图上方
+                arrow.style.left = `calc(50% - 24px)`; // 水平居中（svg宽24px）
+                
+                // 箭头旋转：根据素材图与合成图的水平位置微调角度
+                const sourceCenterX = sourceRect.left + sourceRect.width / 2 + window.scrollX;
+                const compositeCenterX = compositeRect.left + compositeRect.width / 2 + window.scrollX;
+                const angle = (compositeCenterX - sourceCenterX) / 50; // 轻微角度偏移，避免箭头完全平行
+                arrow.style.transform = `rotate(${angle}deg)`;
+            });
+        }
+
+        // 2. 滚动视差效果（页面滚动时，图片轻微偏移，增强动感）
+        window.addEventListener('scroll', () => {
+            const scrollY = window.scrollY;
+            const parallaxElements = document.querySelectorAll('.parallax');
+            
+            parallaxElements.forEach(el => {
+                const speed = el.id.includes('composite') ? 0.15 : 0.25; // 合成图和素材图速度区分
+                el.style.transform = `translateY(${scrollY * speed}px)`;
+            });
+
+            positionArrows(); // 滚动时重新计算箭头位置
+        });
+
+        // 初始化
+        window.addEventListener('load', positionArrows);
+        window.addEventListener('resize', positionArrows); // 窗口 resize 时重新定位
+    </script>
+</body>
+</html>
