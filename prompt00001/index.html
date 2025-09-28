@@ -5,11 +5,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>动感合成图展示</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <style>
         /* 核心：箭头动态效果 */
         .arrow {
             position: absolute;
             animation: arrowPulse 2s infinite ease-in-out;
+            z-index: 10;
         }
         @keyframes arrowPulse {
             0%, 100% { opacity: 0.6; transform: translateY(0); }
@@ -26,99 +28,237 @@
         .img-hover:hover {
             transform: scale(1.05);
         }
+        /* 初始隐藏无图容器 */
+        .hidden-element {
+            display: none !important;
+        }
+        /* 图片加载失败样式 */
+        .img-error {
+            width: 100%;
+            height: 180px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #f5f5f5;
+            color: #ef4444;
+            font-size: 14px;
+            text-align: center;
+            padding: 0 8px;
+        }
     </style>
 </head>
 <body class="bg-gray-100 min-h-screen p-4 md:p-6">
     <div class="max-w-md mx-auto relative">
         <!-- 顶部合成图区域 -->
         <div class="mb-16 md:mb-20">
-            <h1 class="text-center text-2xl font-bold text-gray-800 mb-4">合成效果展示</h1>
+            <h1 class="text-center text-2xl font-bold text-gray-800 mb-2" id="title-display">合成效果展示</h1>
+            <p class="text-center text-gray-600 mb-6" id="description-display">加载中...</p>
+            <!-- 合成图容器 -->
             <div class="bg-white rounded-xl shadow-lg overflow-hidden parallax" id="composite-img-container">
-                <img src="../img/00001.png" 
-                     alt="合成图" 
-                     class="w-full h-auto object-cover img-hover">
+                <img src="" alt="合成图" class="w-full h-auto object-cover img-hover" id="final-img">
+                <div class="img-error hidden-element" id="final-img-error">合成图加载失败，请检查路径</div>
             </div>
         </div>
 
-        <!-- 底部素材图 + 动态箭头 容器（相对定位，承载绝对定位的箭头） -->
-        <div class="relative grid grid-cols-2 md:grid-cols-3 gap-4">
+        <!-- 底部素材图 + 动态箭头 容器 -->
+        <div class="relative grid grid-cols-2 md:grid-cols-3 gap-4" id="sources-container">
             <!-- 素材图1 + 箭头1 -->
-            <div class="bg-white rounded-xl shadow-lg overflow-hidden parallax" id="source1-container">
-                <img src="../img/young.jpg" 
-                     alt="素材图1" 
-                     class="w-full h-auto object-cover img-hover">
-                <!-- 箭头：朝上指向合成图 -->
+            <div class="bg-white rounded-xl shadow-lg overflow-hidden parallax hidden-element" id="source1-container">
+                <img src="" alt="素材图1" class="w-full h-auto object-cover img-hover" id="img1">
+                <div class="img-error hidden-element" id="img1-error">素材图1加载失败</div>
                 <svg class="arrow w-12 h-12 text-blue-500" viewBox="0 0 24 24" fill="currentColor">
                     <path d="M7 14l5-5 5 5z"/>
                 </svg>
             </div>
 
             <!-- 素材图2 + 箭头2 -->
-            <div class="bg-white rounded-xl shadow-lg overflow-hidden parallax" id="source2-container">
-                <img src="../img/adult.jpg" 
-                     alt="素材图2" 
-                     class="w-full h-auto object-cover img-hover">
+            <div class="bg-white rounded-xl shadow-lg overflow-hidden parallax hidden-element" id="source2-container">
+                <img src="" alt="素材图2" class="w-full h-auto object-cover img-hover" id="img2">
+                <div class="img-error hidden-element" id="img2-error">素材图2加载失败</div>
                 <svg class="arrow w-12 h-12 text-pink-500" viewBox="0 0 24 24" fill="currentColor">
                     <path d="M7 14l5-5 5 5z"/>
                 </svg>
             </div>
 
             <!-- 素材图3 + 箭头3（可选） -->
-            <!-- <div class="bg-white rounded-xl shadow-lg overflow-hidden parallax hidden md:block" id="source3-container">
-                <img src="https://picsum.photos/400/300?random=4" 
-                     alt="素材图3" 
-                     class="w-full h-auto object-cover img-hover">
+            <div class="bg-white rounded-xl shadow-lg overflow-hidden parallax hidden-element md:block" id="source3-container">
+                <img src="" alt="素材图3" class="w-full h-auto object-cover img-hover" id="img3">
+                <div class="img-error hidden-element" id="img3-error">素材图3加载失败</div>
                 <svg class="arrow w-12 h-12 text-green-500" viewBox="0 0 24 24" fill="currentColor">
                     <path d="M7 14l5-5 5 5z"/>
                 </svg>
-            </div> -->
+            </div>
         </div>
     </div>
 
     <script>
-        // 1. 动态计算箭头位置（确保箭头从素材图顶部指向合成图底部）
+        // 1. 获取URL中的id参数
+        function getUrlParam(name) {
+            const params = new URLSearchParams(window.location.search);
+            return params.get(name) || '';
+        }
+
+        // 2. 显示加载错误提示
+        function showImgError(imgId, errorId) {
+            const img = document.getElementById(imgId);
+            const errorEl = document.getElementById(errorId);
+            if (img && errorEl) {
+                img.classList.add('hidden-element');
+                errorEl.classList.remove('hidden-element');
+            }
+        }
+
+        // 3. 更新素材图（核心修复：路径适配+加载反馈）
+        const updateSourceImage = (sourceContainerId, imgId, imgPath, errorId) => {
+            const container = document.getElementById(sourceContainerId);
+            const img = document.getElementById(imgId);
+            const errorEl = document.getElementById(errorId);
+            if (!container || !img || !errorEl) return;
+
+            // 重置状态
+            container.classList.add('hidden-element');
+            img.classList.remove('hidden-element');
+            errorEl.classList.add('hidden-element');
+
+            // 处理有图片路径的情况
+            if (imgPath && imgPath.trim() !== '') {
+                // 图片路径：上级目录下的img文件夹
+                const fullPath = `../img/${imgPath.trim()}`;
+                img.src = fullPath;
+
+                // 加载成功：显示容器
+                img.onload = () => {
+                    container.classList.remove('hidden-element');
+                    console.log(`✅ 素材图${imgId}加载成功：${fullPath}`);
+                };
+
+                // 加载失败：显示错误提示
+                img.onerror = () => {
+                    container.classList.remove('hidden-element');
+                    showImgError(imgId, errorId);
+                    console.error(`❌ 素材图${imgId}加载失败，检查路径：${fullPath}`);
+                };
+            } else {
+                // 无图片路径：保持隐藏
+                container.classList.add('hidden-element');
+            }
+        };
+
+        // 4. 动态计算箭头位置
         function positionArrows() {
             const compositeImg = document.getElementById('composite-img-container');
-            const compositeRect = compositeImg.getBoundingClientRect();
+            if (!compositeImg) return;
 
-            // 定位每个素材图的箭头
-            const sources = ['source1-container', 'source2-container', 'source3-container'];
-            sources.forEach((id, index) => {
-                const source = document.getElementById(id);
-                if (!source) return;
-                
+            const compositeRect = compositeImg.getBoundingClientRect();
+            const sources = [
+                { id: 'source1-container', color: 'text-blue-500' },
+                { id: 'source2-container', color: 'text-pink-500' },
+                { id: 'source3-container', color: 'text-green-500' }
+            ];
+
+            sources.forEach(item => {
+                const source = document.getElementById(item.id);
+                if (!source || source.classList.contains('hidden-element')) return;
+
                 const sourceRect = source.getBoundingClientRect();
                 const arrow = source.querySelector('.arrow');
                 if (!arrow) return;
 
-                // 箭头位置：素材图顶部居中，向上指向合成图
-                arrow.style.top = `${-sourceRect.height / 2 - 20}px`; // 向上偏移，位于素材图上方
-                arrow.style.left = `calc(50% - 24px)`; // 水平居中（svg宽24px）
-                
-                // 箭头旋转：根据素材图与合成图的水平位置微调角度
+                // 箭头定位：素材图顶部居中，指向合成图
+                arrow.style.top = `${-sourceRect.height / 2 - 20}px`;
+                arrow.style.left = `calc(50% - 24px)`;
+
+                // 微调箭头角度
                 const sourceCenterX = sourceRect.left + sourceRect.width / 2 + window.scrollX;
                 const compositeCenterX = compositeRect.left + compositeRect.width / 2 + window.scrollX;
-                const angle = (compositeCenterX - sourceCenterX) / 50; // 轻微角度偏移，避免箭头完全平行
+                const angle = (compositeCenterX - sourceCenterX) / 50;
                 arrow.style.transform = `rotate(${angle}deg)`;
             });
         }
 
-        // 2. 滚动视差效果（页面滚动时，图片轻微偏移，增强动感）
-        window.addEventListener('scroll', () => {
+        // 5. 滚动视差效果
+        function handleParallax() {
             const scrollY = window.scrollY;
-            const parallaxElements = document.querySelectorAll('.parallax');
+            const parallaxElements = document.querySelectorAll('.parallax:not(.hidden-element)');
             
             parallaxElements.forEach(el => {
-                const speed = el.id.includes('composite') ? 0.15 : 0.25; // 合成图和素材图速度区分
+                const speed = el.id.includes('composite') ? 0.15 : 0.25;
                 el.style.transform = `translateY(${scrollY * speed}px)`;
             });
 
-            positionArrows(); // 滚动时重新计算箭头位置
-        });
+            positionArrows(); // 滚动时重新定位箭头
+        }
 
-        // 初始化
-        window.addEventListener('load', positionArrows);
-        window.addEventListener('resize', positionArrows); // 窗口 resize 时重新定位
+        // 6. 加载Excel数据并渲染页面
+        async function loadExcelData() {
+            const targetId = getUrlParam('id');
+            if (!targetId) {
+                alert('请在URL后添加id参数，例如：index.html?id=2');
+                document.getElementById('description-display').textContent = '未指定数据ID，请检查URL';
+                return;
+            }
+
+            try {
+                // 加载Excel文件（与index.html同目录，命名为data.xlsx）
+                const response = await fetch('data.xlsx');
+                const arrayBuffer = await response.arrayBuffer();
+                const workbook = XLSX.read(arrayBuffer, { type: 'array' });
+
+                // 解析第一个工作表为JSON
+                const sheetName = workbook.SheetNames[0];
+                const worksheet = workbook.Sheets[sheetName];
+                const jsonData = XLSX.utils.sheet_to_json(worksheet);
+
+                // 查找匹配ID的数据
+                const targetData = jsonData.find(item => item.id == targetId);
+                if (!targetData) {
+                    alert(`未找到ID为${targetId}的数据`);
+                    document.getElementById('description-display').textContent = `未找到ID: ${targetId} 的数据`;
+                    return;
+                }
+
+                // 渲染页面核心内容
+                document.title = targetData.title || '合成效果展示';
+                document.getElementById('title-display').textContent = targetData.title || '未设置标题';
+                document.getElementById('description-display').textContent = targetData.discription || '无描述';
+
+                // 渲染合成图（路径修改为../img/）
+                const finalImg = document.getElementById('final-img');
+                const finalImgError = document.getElementById('final-img-error');
+                if (targetData.final_img && targetData.final_img.trim() !== '') {
+                    const finalImgPath = `../img/${targetData.final_img.trim()}`;
+                    finalImg.src = finalImgPath;
+                    finalImg.onload = () => {
+                        console.log(`✅ 合成图加载成功：${finalImgPath}`);
+                    };
+                    finalImg.onerror = () => {
+                        showImgError('final-img', 'final-img-error');
+                        console.error(`❌ 合成图加载失败：${finalImgPath}`);
+                    };
+                } else {
+                    showImgError('final-img', 'final-img-error');
+                }
+
+                // 渲染素材图（调用更新函数）
+                updateSourceImage('source1-container', 'img1', targetData.img1, 'img1-error');
+                updateSourceImage('source2-container', 'img2', targetData.img2, 'img2-error');
+                updateSourceImage('source3-container', 'img3', targetData.img3, 'img3-error');
+
+                // 初始化箭头位置
+                setTimeout(positionArrows, 100); // 延迟确保图片已渲染
+
+            } catch (error) {
+                console.error('❌ 加载Excel失败：', error);
+                document.getElementById('description-display').textContent = 'Excel数据加载失败，请检查文件是否存在';
+                alert('Excel数据加载失败，请确认文件"data.xlsx"与index.html同目录');
+            }
+        }
+
+        // 7. 事件监听
+        window.addEventListener('load', loadExcelData);
+        window.addEventListener('scroll', handleParallax);
+        window.addEventListener('resize', positionArrows);
     </script>
 </body>
 </html>
+    
