@@ -51,7 +51,7 @@
     <div class="max-w-md mx-auto relative">
         <!-- 顶部合成图区域 -->
         <div class="mb-16 md:mb-20">
-            <h1 class="text-center text-2xl font-bold text-gray-800 mb-2" id="title-display">合成效果展示</h1>
+            <!-- <h1 class="text-center text-2xl font-bold text-gray-800 mb-2" id="title-display">合成效果展示</h1> -->
             <p class="text-center text-gray-600 mb-6" id="description-display">加载中...</p>
             <!-- 合成图容器 -->
             <div class="bg-white rounded-xl shadow-lg overflow-hidden parallax" id="composite-img-container">
@@ -219,7 +219,7 @@
 
                 // 渲染页面核心内容
                 document.title = targetData.title || '合成效果展示';
-                document.getElementById('title-display').textContent = targetData.title || '未设置标题';
+                // document.getElementById('title-display').textContent = targetData.title || '未设置标题';
                 document.getElementById('description-display').textContent = targetData.discription || '无描述';
 
                 // 渲染合成图（路径修改为../img/）
